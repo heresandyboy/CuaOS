@@ -9,7 +9,8 @@ A locally-running AI agent that autonomously controls a virtual desktop inside a
 
 ## 🎬 Demo
 
-[[https://github.com/user-attachments/assets/Screencast from 11-02-2026 13_58_00.webm](https://github.com/3m1rc1kk/Locally-CUA-Sandbox-System/blob/main/assets/Screencast%20from%2011-02-2026%2013_58_00.webm)](https://github.com/3m1rc1kk/Locally-CUA-Sandbox-System/blob/main/assets/Screencast%20from%2011-02-2026%2013_58_00.webm)
+[Screencast from 11-02-2026 13_58_00.webm](https://github.com/user-attachments/assets/27fa7a7a-f725-428d-a3dc-75ba41ec79de)
+
 
 > **↑ Replace the link above with your demo video after uploading it to `assets/`.**
 
