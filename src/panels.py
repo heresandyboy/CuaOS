@@ -63,18 +63,18 @@ class TopBar(QFrame):
         layout.addWidget(self.model_status)
 
         # Step counter
-        self.step_label = QLabel("Adım: 0")
+        self.step_label = QLabel("STEP: 0")
         self.step_label.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         layout.addWidget(self.step_label)
 
         # Latency
-        self.latency_label = QLabel("Gecikme: —")
+        self.latency_label = QLabel("Delay: —")
         self.latency_label.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
         layout.addWidget(self.latency_label)
 
     def set_docker_status(self, connected: bool) -> None:
         color = C.GREEN if connected else C.RED
-        text = "Bağlı" if connected else "Bağlantı Yok"
+        text = "Connection" if connected else "No Connection"
         self.docker_status.setText(_dot(color, f"Docker: {text}"))
 
     def set_model_status(self, status: str) -> None:
@@ -84,10 +84,10 @@ class TopBar(QFrame):
         self.model_status.setText(_dot(color, f"Model: {label_map.get(status, status)}"))
 
     def set_step(self, n: int) -> None:
-        self.step_label.setText(f"Adım: {n}")
+        self.step_label.setText(f"STEP: {n}")
 
     def set_latency(self, ms: float) -> None:
-        self.latency_label.setText(f"Gecikme: {ms:.0f}ms")
+        self.latency_label.setText(f"Delay: {ms:.0f}ms")
 
 
 # ═══════════════════════════════════════════
@@ -95,7 +95,7 @@ class TopBar(QFrame):
 # ═══════════════════════════════════════════
 
 class CommandPanel(QFrame):
-    """Komut girişi, hazır komutlar, geçmiş ve agent adım listesi."""
+    """Command input, pre-set commands, history, and agent step list."""
 
     run_requested = pyqtSignal(str)
     stop_requested = pyqtSignal()
@@ -111,20 +111,20 @@ class CommandPanel(QFrame):
         layout.setSpacing(8)
 
         # --- Command input ---
-        lbl = QLabel("KOMUT")
+        lbl = QLabel("Command")
         lbl.setObjectName("sectionTitle")
         layout.addWidget(lbl)
 
         self.cmd_input = QLineEdit()
-        self.cmd_input.setPlaceholderText("Komut girin… (ör: Open browser)")
+        self.cmd_input.setPlaceholderText("Enter the command… (e.g., Open browser)")
         self.cmd_input.returnPressed.connect(self._emit_run)
         layout.addWidget(self.cmd_input)
 
         btn_row = QHBoxLayout()
-        self.run_btn = QPushButton("▶  Çalıştır")
+        self.run_btn = QPushButton("▶  Run")
         self.run_btn.setObjectName("runBtn")
         self.run_btn.clicked.connect(self._emit_run)
-        self.stop_btn = QPushButton("■  Durdur")
+        self.stop_btn = QPushButton("■  Stop")
         self.stop_btn.setObjectName("stopBtn")
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop_requested.emit)
@@ -133,17 +133,17 @@ class CommandPanel(QFrame):
         layout.addLayout(btn_row)
 
         # --- Presets ---
-        lbl2 = QLabel("HAZIR KOMUTLAR")
+        lbl2 = QLabel("READY-MADE COMMANDS")
         lbl2.setObjectName("sectionTitle")
         layout.addWidget(lbl2)
 
         presets = [
             ("🏠 Home", "Click Home file"),
             ("💻 Terminal", "Open terminal"),
-            ("🌐 Tarayıcı", "Open web browser"),
-            ("📝 Not Defteri", "Open text editor"),
+            ("🌐 Browser", "Open web browser"),
+            ("📝 Notebook", "Open text editor"),
             ("🔍 Wikipedia", 'Open browser, go to Wikipedia, search "LLM"'),
-            ("📁 Dosyalar", "Open file manager"),
+            ("📁 Files", "Open double click file manager"),
         ]
         grid = QGridLayout()
         grid.setSpacing(4)
@@ -158,7 +158,7 @@ class CommandPanel(QFrame):
         layout.addLayout(grid)
 
         # --- Agent Steps ---
-        lbl3 = QLabel("AGENT ADIMLARI")
+        lbl3 = QLabel("AGENT STEPS")
         lbl3.setObjectName("sectionTitle")
         layout.addWidget(lbl3)
 
@@ -195,7 +195,7 @@ class CommandPanel(QFrame):
 # ═══════════════════════════════════════════
 
 class InspectorPanel(QFrame):
-    """Son eylem, metrikler, ayarlar."""
+    """Last action, metrics, settings."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -208,18 +208,18 @@ class InspectorPanel(QFrame):
         layout.setSpacing(10)
 
         # --- Last Action ---
-        lbl = QLabel("SON EYLEM")
+        lbl = QLabel("Last Action")
         lbl.setObjectName("sectionTitle")
         layout.addWidget(lbl)
 
         self.action_display = QTextEdit()
         self.action_display.setReadOnly(True)
         self.action_display.setMaximumHeight(140)
-        self.action_display.setPlaceholderText("Henüz eylem yok…")
+        self.action_display.setPlaceholderText("Last action, metrics, settings...")
         layout.addWidget(self.action_display)
 
         # --- Metrics ---
-        lbl2 = QLabel("METRİKLER")
+        lbl2 = QLabel("METRICS")
         lbl2.setObjectName("sectionTitle")
         layout.addWidget(lbl2)
 
@@ -230,10 +230,10 @@ class InspectorPanel(QFrame):
 
         self.metric_labels: Dict[str, tuple] = {}
         for i, (key, label) in enumerate([
-            ("steps", "Toplam Adım"),
-            ("clicks", "Tıklama"),
-            ("types", "Yazma"),
-            ("elapsed", "Süre (s)"),
+            ("steps", "Total Steps"),
+            ("clicks", "Click"),
+            ("types", "Type"),
+            ("elapsed", "Time (s)"),
         ]):
             val_lbl = QLabel("0")
             val_lbl.setObjectName("metricValue")
@@ -248,17 +248,17 @@ class InspectorPanel(QFrame):
         layout.addWidget(metrics_frame)
 
         # --- VM Info ---
-        lbl3 = QLabel("SANDBOX BİLGİSİ")
+        lbl3 = QLabel("SANDBOX INFORMATION")
         lbl3.setObjectName("sectionTitle")
         layout.addWidget(lbl3)
 
-        self.vm_info = QLabel("Container: —\nÇözünürlük: —\nAPI: —")
+        self.vm_info = QLabel("Container: —\Resolution: —\nAPI: —")
         self.vm_info.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 11px; padding: 8px; background: {C.BG_INPUT}; border-radius: 6px;")
         self.vm_info.setWordWrap(True)
         layout.addWidget(self.vm_info)
 
         # --- Config ---
-        lbl4 = QLabel("YAPILANDIRMA")
+        lbl4 = QLabel("CONFIGURATION")
         lbl4.setObjectName("sectionTitle")
         layout.addWidget(lbl4)
 
@@ -280,7 +280,7 @@ class InspectorPanel(QFrame):
                 self.metric_labels[key][0].setText(val)
 
     def set_vm_info(self, container: str, resolution: str, api_url: str) -> None:
-        self.vm_info.setText(f"Container: {container}\nÇözünürlük: {resolution}\nAPI: {api_url}")
+        self.vm_info.setText(f"Container: {container}\nResolution: {resolution}\nAPI: {api_url}")
 
     def set_config(self, cfg) -> None:
         lines = [
@@ -297,7 +297,7 @@ class InspectorPanel(QFrame):
 # ═══════════════════════════════════════════
 
 class LogPanel(QFrame):
-    """Yapılandırılmış loglar, hata filtresi, dışa aktarma."""
+"""Configured logs, error filter, export."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -312,17 +312,17 @@ class LogPanel(QFrame):
         layout.setSpacing(6)
 
         header = QHBoxLayout()
-        lbl = QLabel("📋 LOGLAR")
+        lbl = QLabel("📋 LOGS")
         lbl.setObjectName("sectionTitle")
         header.addWidget(lbl)
         header.addStretch()
 
-        self.clear_btn = QPushButton("Temizle")
+        self.clear_btn = QPushButton("Clear")
         self.clear_btn.setFixedHeight(28)
         self.clear_btn.clicked.connect(self.clear)
         header.addWidget(self.clear_btn)
 
-        self.export_btn = QPushButton("JSON Dışa Aktar")
+        self.export_btn = QPushButton("JSON Export")
         self.export_btn.setFixedHeight(28)
         self.export_btn.clicked.connect(self._export)
         header.addWidget(self.export_btn)
@@ -348,8 +348,8 @@ class LogPanel(QFrame):
         self._entries.clear()
 
     def _export(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "Log Dışa Aktar", "cua_logs.json", "JSON (*.json)")
+        path, _ = QFileDialog.getSaveFileName(self, "Log Export", "cua_logs.json", "JSON (*.json)")
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self._entries, f, ensure_ascii=False, indent=2)
-            self.append(f"Loglar dışa aktarıldı: {path}", "success")
+            self.append(f"Logs have been exported: {path}", "success")
