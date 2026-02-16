@@ -12,14 +12,14 @@
 If you discover a security vulnerability in this project, **please do not open a public issue.** Instead:
 
 1. **Email:** Send a detailed report to the project maintainer via private message or email.
-   Email: ishakemir454@gmail.com
-3. 
-4. **Include:**
+Email: ishakemir454@gmail.com
+
+2. **Include:**
    - Description of the vulnerability
    - Steps to reproduce
    - Potential impact
    - Suggested fix (if any)
-5. **Response time:** We aim to acknowledge reports within **48 hours** and provide a fix or mitigation within **7 days** for critical issues.
+3. **Response time:** We aim to acknowledge reports within **48 hours** and provide a fix or mitigation within **7 days** for critical issues.
 
 ## Security Architecture
 
