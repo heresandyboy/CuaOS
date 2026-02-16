@@ -51,21 +51,21 @@ def should_stop_on_repeat(history, new_action):
     a1 = (last.get("action") or "").upper()
     a2 = (new_action.get("action") or "").upper()
 
-    # Is the action the same?
+    # Is the action type the same?
     if a1 != a2:
         return False, ""
 
-    # TYPE recheck
+    # TYPE repeat check
     if a2 == "TYPE":
         if (last.get("text") or "") == (new_action.get("text") or ""):
             return True, "Repeat TYPE detected (same text)."
 
-    # PRESS recheck
+    # PRESS repeat check
     if a2 == "PRESS":
         if (last.get("key") or "") == (new_action.get("key") or ""):
             return True, "Repeat PRESS detected (same key)."
 
-    # HOTKEY recheck
+    # HOTKEY repeat check
     if a2 == "HOTKEY":
         if (last.get("keys") or []) == (new_action.get("keys") or []):
             return True, "Repeat HOTKEY detected (same keys)."
