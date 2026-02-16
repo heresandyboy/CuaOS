@@ -12,7 +12,7 @@ from src.guards import validate_xy, should_stop_on_repeat
 from src.actions import execute_action
 
 
-# main.py veya llm_client.py
+# Trim conversation history to avoid exceeding context length
 def trim_history(history, keep_last=6):
     if len(history) <= keep_last:
         return history
@@ -23,26 +23,26 @@ def main() -> None:
     sandbox = Sandbox(cfg)
     sandbox.start()
 
-    # VNC viewer penceresi açılır (opsiyonel/noVNC)
+    # Launch VNC viewer window (optional/noVNC)
     if getattr(cfg, "OPEN_VNC_VIEWER", True):
         sandbox.launch_vnc_viewer()
 
     llm = load_llm()
     print("[DEBUG] cfg.N_CTX =", cfg.N_CTX)
 
-    print("Agent hazır. Çıkmak için 'exit', 'quit' veya 'çık' yaz.")
+    print("Agent ready. Type 'exit' or 'quit' to quit.")
 
-    # Sonsuz döngü: kullanıcı çıkana kadar devam eder
+    # Main loop: runs until user exits
     while True:
-        objective = input("\nKomut gir (veya çık): ").strip()
+        objective = input("\nEnter command (or 'quit'): ").strip()
 
-        # Kullanıcı çıkışı tanıma
+        # Recognize user exit
         if not objective:
-            print("Komut boş olamaz. Tekrar gir.")
+            print("Command cannot be empty. Try again.")
             continue
         low = objective.lower()
-        if low in ("exit", "quit", "q", "çık", "çıkış"):
-            print("Agent kapatılıyor.")
+        if low in ("exit", "quit", "q"):
+            print("Agent shutting down.")
             break
 
         history: List[Dict[str, Any]] = []
@@ -53,74 +53,74 @@ def main() -> None:
 
             time.sleep(cfg.WAIT_BEFORE_SCREENSHOT_SEC)
 
-            # Anlık ekran görüntüsü al
+            # Capture current screenshot
             img = capture_screen(sandbox, cfg.SCREENSHOT_PATH)
 
             out: Dict[str, Any] | None = None
 
-            # Model’den bir sonraki eylemi iste
+            # Ask the model for the next action
             for attempt in range(cfg.MODEL_RETRY + 1):
                 out = ask_next_action(llm, objective, cfg.SCREENSHOT_PATH, trim_history(history))
                 action = (out.get("action") or "NOOP").upper()
 
-                # Bitti ifadesi
+                # Done statement
                 if action == "BITTI":
-                    print("[MODEL] BITTI -> bu komut için döngü sonlandırıldı.")
+                    print("[MODEL] BITTI -> task completed, ending loop.")
                     break
 
-                # CLICK gibi normal koordinatlı eylemler
+                # Normal coordinate-based actions like CLICK
                 if action in ("CLICK", "DOUBLE_CLICK", "RIGHT_CLICK"):
                     x = float(out.get("x", 0.5))
                     y = float(out.get("y", 0.5))
                     ok, reason = validate_xy(x, y)
                     if ok:
                         break
-                    print(f"[WARN] Uygun olmayan koordinat ({reason}), yeniden deneniyor.")
+                    print(f"[WARN] Invalid coordinates ({reason}), retrying.")
                     history.append({"action": "INVALID_COORDS", "raw": out})
                     out = None
                     continue
 
-                # Diğer eylem türleri doğrudan kabul edilir
+                # Other action types are accepted directly
                 break
 
-            # Eğer out None ise model geçerli bir eylem üretemedi
+            # If out is None, the model could not produce a valid action
             if out is None:
-                print("[ERROR] Model geçerli bir aksiyon üretemedi, bu komut için döngü sonlandırılıyor.")
+                print("[ERROR] Model could not produce a valid action, ending loop for this command.")
                 break
 
             print("[MODEL]", out)
 
-            # Repeat guard: aynı eylem tekrarı ise dur
+            # Repeat guard: stop if the same action is repeated
             stop, why = should_stop_on_repeat(history, out)
             if stop:
-                print(f"[STOP] {why} -> bu komut için döngü sonlandırıldı.")
+                print(f"[STOP] {why} -> ending loop for this command.")
                 break
 
-            # Eğer model BITTI verdiyse
+            # If model returned BITTI (done)
             if (out.get("action") or "").upper() == "BITTI":
-                print("Model bu komut için tamamlandı dedi. Yeni komut isteği geliyor.")
+                print("Model says task is complete. Waiting for new command.")
                 break
 
-            # Preview çizimi (opsiyonel)
+            # Draw preview (optional)
             action = (out.get("action") or "").upper()
             if action in ("CLICK", "DOUBLE_CLICK", "RIGHT_CLICK"):
                 preview_path = cfg.PREVIEW_PATH_TEMPLATE.format(i=step)
                 draw_preview(img, float(out["x"]), float(out["y"]), preview_path)
 
-            # Aksiyonunu uygula
+            # Execute the action
             execute_action(sandbox, out)
             history.append(out)
 
             step += 1
 
-            # Adım sayısı çok uzarsa güvenlik
+            # Safety: stop if step count is too high
             if step > cfg.MAX_STEPS:
-                print("[STOP] MAX_STEPS aşıldı, bu komut için döngü sonlandırıldı.")
+                print("[STOP] MAX_STEPS exceeded, ending loop for this command.")
                 break
 
-        # Burada tek bir objective için döngü bitsin,
-        # sonra tekrar kullanıcıdan yeni komut iste
-        print("Bir sonraki komut için hazır.")
+        # Loop for a single objective ends here,
+        # then ask the user for a new command
+        print("Ready for the next command.")
 
 
 if __name__ == "__main__":
