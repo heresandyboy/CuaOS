@@ -21,10 +21,10 @@ class CFG:
     # Repeat guard
     STOP_ON_REPEAT: bool = True
 
-    # Tolerance for capturing clicks at the same point.
+    # Tolerance for detecting repeated clicks on the same point
     REPEAT_XY_EPS: float = 0.01     # normalized 0..1
 
-    # Open VM screen as window
+    # Open VM screen as a separate window
     OPEN_VNC_VIEWER: bool = True
     IMAGE_MIN_TOKENS: int = 1024
 
