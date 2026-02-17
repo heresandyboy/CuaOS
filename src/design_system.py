@@ -1,3 +1,7 @@
+"""
+CUA Mission Control — Design System
+Reference: arayuz.py.py (EyeControl OS blue theme)
+"""
 from __future__ import annotations
 from dataclasses import dataclass
 

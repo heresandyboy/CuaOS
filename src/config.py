@@ -10,6 +10,14 @@ class CFG:
     GGUF_REPO_ID: str = "mradermacher/Qwen3-VL-8B-Instruct-abliterated-v2.0-GGUF"
     GGUF_MODEL_FILENAME: str = "Qwen3-VL-8B-Instruct-abliterated-v2.0.Q5_K_S.gguf"
     GGUF_MMPROJ_FILENAME: str = "Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-f16.gguf"
+
+    # ----------------------
+    # Planning LLM (API-based)
+    # ----------------------
+    PLANNER_PROVIDER: str = "openrouter"       # openrouter | openai | local
+    PLANNER_API_KEY: str = ""                  # set via UI or env var
+    PLANNER_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
+    PLANNER_MAX_TOKENS: int = 1024
     # Llama runtime
     N_CTX: int = 2048
     N_THREADS: int = 12
