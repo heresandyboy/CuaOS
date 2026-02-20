@@ -44,7 +44,18 @@ def execute_action(sandbox: Sandbox, act: Dict[str, Any]) -> None:
         return
 
     if a == "TYPE":
-        sandbox.type_text(str(act.get("text") or ""))
+        # Fara may include click_x/click_y to click a field before typing
+        if "click_x" in act and "click_y" in act:
+            sandbox.left_click_norm(float(act["click_x"]), float(act["click_y"]))
+            _pause_after_action()
+        text_val = str(act.get("text") or "")
+        if act.get("delete_existing"):
+            sandbox.hotkey(["ctrl", "a"])
+            time.sleep(0.1)
+        sandbox.type_text(text_val)
+        if act.get("press_enter", False) is True:
+            time.sleep(0.1)
+            sandbox.press_key("enter")
         _pause_after_action()
         return
 
@@ -86,6 +97,33 @@ def execute_action(sandbox: Sandbox, act: Dict[str, Any]) -> None:
             float(act.get("y", 0.5)),
             int(act.get("button", 1)),
         )
+        return
+
+    # Compound actions (Fara-7B native actions)
+    if a == "VISIT_URL":
+        url = str(act.get("url", ""))
+        log.info("VISIT_URL: %s", url)
+        sandbox.hotkey(["ctrl", "l"])      # focus address bar
+        time.sleep(0.3)
+        sandbox.hotkey(["ctrl", "a"])      # select all existing text
+        time.sleep(0.1)
+        sandbox.type_text(url)
+        time.sleep(0.1)
+        sandbox.press_key("enter")
+        _pause_after_action()
+        return
+
+    if a == "WEB_SEARCH":
+        query = str(act.get("query", ""))
+        log.info("WEB_SEARCH: %s", query)
+        sandbox.hotkey(["ctrl", "l"])      # focus address bar
+        time.sleep(0.3)
+        sandbox.hotkey(["ctrl", "a"])      # select all existing text
+        time.sleep(0.1)
+        sandbox.type_text(query)
+        time.sleep(0.1)
+        sandbox.press_key("enter")
+        _pause_after_action()
         return
 
     if a == "BITTI":

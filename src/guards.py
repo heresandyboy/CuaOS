@@ -41,6 +41,10 @@ def action_signature(act: Dict[str, Any]) -> str:
         return f"SCROLL:{int(act.get('scroll',0))}"
     if a == "WAIT":
         return f"WAIT:{float(act.get('seconds',0))}"
+    if a == "VISIT_URL":
+        return f"VISIT_URL:{act.get('url','')}"
+    if a == "WEB_SEARCH":
+        return f"WEB_SEARCH:{act.get('query','')}"
     return a
 
 
@@ -104,7 +108,7 @@ def _model_changed_approach(history: List[Dict[str, Any]], new_action: Dict[str,
     # "Changed approach" = different action category
     click_types = CLICK_ACTIONS
     keyboard_types = {"TYPE", "PRESS", "HOTKEY"}
-    nav_types = {"SCROLL", "WAIT"}
+    nav_types = {"SCROLL", "WAIT", "VISIT_URL", "WEB_SEARCH"}
 
     def category(t: str) -> str:
         if t in click_types:

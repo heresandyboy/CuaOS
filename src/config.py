@@ -32,6 +32,14 @@ MODEL_PROFILES: Dict[str, Dict] = {
         "n_ctx": 32768,
         "n_batch": 512,
     },
+    "fara-7b": {
+        "repo_id": "bartowski/microsoft_Fara-7B-GGUF",
+        "model_file": "microsoft_Fara-7B-Q8_0.gguf",
+        "mmproj_file": "mmproj-microsoft_Fara-7B-f16.gguf",
+        "chat_handler": "fara",
+        "n_ctx": 16384,
+        "n_batch": 512,
+    },
 }
 
 # Active model — change this to switch models (or set env var CUAOS_MODEL)
@@ -150,14 +158,21 @@ class CFG:
         "enter", "tab", "esc", "backspace", "delete",
         "up", "down", "left", "right",
         "home", "end", "pageup", "pagedown",
-        "space"
+        "space", "f5", "f11",
     )
 
     ALLOWED_HOTKEYS: Tuple[Tuple[str, ...], ...] = (
         ("ctrl", "l"),
         ("ctrl", "t"),
         ("ctrl", "w"),
+        ("ctrl", "a"),
+        ("ctrl", "c"),
+        ("ctrl", "v"),
+        ("ctrl", "r"),
         ("alt", "tab"),
+        ("alt", "left"),
+        ("alt", "right"),
+        ("alt", "f4"),
     )
 
 

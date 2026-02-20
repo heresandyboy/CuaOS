@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 from src.config import cfg, MODEL_PROFILES
 from src.log import get_logger
 from src.sandbox import Sandbox
-from src.llm_client import load_llm, ask_next_action
+from src.llm_client import load_llm, ask_next_action, reset_fara_history
 from src.vision import capture_screen, draw_preview, screen_changed
 from src.guards import validate_xy, check_repeat, NUDGE, STOP
 from src.actions import execute_action
@@ -55,6 +55,7 @@ def main() -> None:
         history: List[Dict[str, Any]] = []
         nudge_count = 0
         prev_img = None
+        reset_fara_history()
 
         step = 1
         while True:

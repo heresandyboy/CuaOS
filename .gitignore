@@ -160,6 +160,12 @@ cython_debug/
 #.idea/
 
 # ── Project-specific ──
+# Beads issue tracker (lives on beads-sync branch, not code branches)
+.beads/
+
+# Serena IDE config
+.serena/
+
 # Runtime screenshots
 img/*.png
 

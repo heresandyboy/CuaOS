@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
 from src.config import cfg, MODEL_PROFILES
 from src.log import get_logger
 from src.sandbox import Sandbox
-from src.llm_client import load_llm, ask_next_action
+from src.llm_client import load_llm, ask_next_action, reset_fara_history
 from src.vision import capture_screen, capture_screen_raw, draw_preview, screen_changed
 from src.guards import validate_xy, check_repeat, NUDGE, STOP
 from src.actions import execute_action
@@ -226,6 +226,9 @@ def run_single_command(
     nudge_count = 0
     t0 = time.time()
     prev_img = None  # previous screenshot for screen-change detection
+
+    # Reset Fara multi-turn history for each new task run
+    reset_fara_history()
 
     log.info("=== RUN START === objective=%r", objective)
 
