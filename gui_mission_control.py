@@ -5,6 +5,12 @@ Professional task control interface connected to a Docker sandbox.
 """
 from __future__ import annotations
 
+# CRITICAL: Import llama_cpp BEFORE any other heavy library (PyTorch, PIL, Qt)
+# to avoid CUDA DLL conflicts on Windows that cause access violations.
+# See: https://github.com/abetlen/llama-cpp-python/issues/1903
+import src.config  # noqa: F401  — sets up DLL paths first
+import llama_cpp  # noqa: F401  — must init CUDA before Qt/PIL/torch load their own
+
 import sys
 import time
 import threading
@@ -18,14 +24,17 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFrame, QSizePolicy, QSplitter
 )
 
-from src.config import cfg
+from src.config import cfg, MODEL_PROFILES
+from src.log import get_logger
 from src.sandbox import Sandbox
 from src.llm_client import load_llm, ask_next_action
-from src.vision import capture_screen, capture_screen_raw, draw_preview
-from src.guards import validate_xy, should_stop_on_repeat
+from src.vision import capture_screen, capture_screen_raw, draw_preview, screen_changed
+from src.guards import validate_xy, check_repeat, NUDGE, STOP
 from src.actions import execute_action
 from src.design_system import build_stylesheet
 from src.panels import TopBar, CommandPanel, InspectorPanel, LogPanel
+
+log = get_logger("agent")
 
 
 # ═══════════════════════════════════════════
@@ -214,23 +223,45 @@ def run_single_command(
     step = 1
     click_count = 0
     type_count = 0
+    nudge_count = 0
     t0 = time.time()
+    prev_img = None  # previous screenshot for screen-change detection
+
+    log.info("=== RUN START === objective=%r", objective)
 
     while True:
         if stop_event and stop_event.is_set():
+            log.info("Run stopped by user")
             return "STOPPED"
 
+        log.info("--- Step %d ---", step)
         signals.log.emit(f"═══ STEP {step} ═══", "info")
         time.sleep(getattr(cfg, "WAIT_BEFORE_SCREENSHOT_SEC", 0.8))
         img = capture_screen(sandbox, cfg.SCREENSHOT_PATH)
+
+        # --- Screen-change detection: annotate the PREVIOUS action ---
+        if prev_img is not None and history:
+            # Only annotate real actions, not feedback entries
+            if history[-1].get("action") != "SYSTEM_FEEDBACK":
+                changed = screen_changed(prev_img, img)
+                history[-1]["screen_changed"] = changed
+                if not changed:
+                    log.info("No visible screen change after last action")
+                    signals.log.emit("[INFO] No visible screen change after last action.", "warn")
 
         out: Optional[Dict[str, Any]] = None
         t_model = time.time()
 
         for attempt in range(getattr(cfg, "MODEL_RETRY", 2) + 1):
-            out = ask_next_action(llm, objective, cfg.SCREENSHOT_PATH, trim_history(history))
+            try:
+                out = ask_next_action(llm, objective, cfg.SCREENSHOT_PATH, trim_history(history))
+            except Exception:
+                log.exception("ask_next_action failed (attempt %d)", attempt + 1)
+                out = None
+                continue
             action = (out.get("action") or "NOOP").upper()
             if action == "BITTI":
+                log.info("Model signalled BITTI (task complete)")
                 return "DONE(BITTI)"
             if action in ("CLICK", "DOUBLE_CLICK", "RIGHT_CLICK"):
                 x, y = _extract_xy(out)
@@ -238,6 +269,7 @@ def run_single_command(
                 if ok:
                     out["x"], out["y"] = x, y
                     break
+                log.warning("Invalid coordinates (%s), retrying", reason)
                 signals.log.emit(f"[WARN] Invalid coordinates ({reason}), retrying.", "warn")
                 history.append({"action": "INVALID_COORDS", "raw": out})
                 out = None
@@ -248,10 +280,12 @@ def run_single_command(
         signals.latency_update.emit(latency_ms)
 
         if out is None:
+            log.error("No valid action after retries")
             return "ERROR(no valid action)"
 
         action = (out.get("action") or "").upper()
         detail = out.get("why_short", out.get("target", ""))
+        log.info("Step %d: %s — %s (%.0f ms)", step, action, detail, latency_ms)
         signals.log.emit(f"[MODEL] {action}: {detail}", "model")
         signals.action_update.emit(out)
         signals.step_update.emit(step, action, str(detail))
@@ -262,19 +296,47 @@ def run_single_command(
         if action == "TYPE":
             type_count += 1
 
-        stop, why = should_stop_on_repeat(history, out)
-        if stop:
-            signals.log.emit(f"[STOPPED] {why}", "warn")
+        # --- Guard: nudge or stop ---
+        verdict, guard_msg = check_repeat(history, out, nudge_count)
+
+        if verdict == STOP:
+            log.warning("GUARD STOP: %s", guard_msg)
+            signals.log.emit(f"[STOPPED] {guard_msg}", "warn")
             return "DONE(repeat-guard)"
 
+        if verdict == NUDGE:
+            nudge_count += 1
+            log.warning("GUARD NUDGE %d/%d: %s",
+                        nudge_count, getattr(cfg, "MAX_NUDGES", 3), guard_msg)
+            signals.log.emit(
+                f"[NUDGE {nudge_count}/{getattr(cfg, 'MAX_NUDGES', 3)}] {guard_msg}", "warn")
+            # Don't execute the action — inject feedback so the model can course-correct
+            history.append({
+                "action": "SYSTEM_FEEDBACK",
+                "target": guard_msg,
+                "why_short": f"Guard nudge #{nudge_count}",
+            })
+            step += 1
+            if step > getattr(cfg, "MAX_STEPS", 100):
+                return "DONE(max-steps)"
+            continue  # skip execution, get new screenshot and ask model again
+
+        # --- Normal execution ---
         if action in ("CLICK", "DOUBLE_CLICK", "RIGHT_CLICK"):
             preview_path = cfg.PREVIEW_PATH_TEMPLATE.format(i=step)
             draw_preview(img, float(out["x"]), float(out["y"]), preview_path)
 
-        execute_action(sandbox, out)
+        try:
+            execute_action(sandbox, out)
+        except Exception:
+            log.exception("execute_action failed for %s", action)
+            signals.log.emit(f"[ERROR] Action {action} failed — see log file", "error")
+
+        prev_img = img  # save for next iteration's comparison
         history.append(out)
         step += 1
-        if step > getattr(cfg, "MAX_STEPS", 30):
+        if step > getattr(cfg, "MAX_STEPS", 100):
+            log.info("Max steps reached (%d)", cfg.MAX_STEPS)
             return "DONE(max-steps)"
 
 
@@ -369,6 +431,9 @@ class MissionControlWindow(QMainWindow):
         self.refresh_timer.timeout.connect(self._refresh_vm)
         self.refresh_timer.start(350)
 
+        # --- Model switch signal ---
+        self.top_bar.model_switch_requested.connect(self._on_model_switch)
+
         # --- Init sandbox + model in background ---
         self._center_frame = center_frame
         self._center_layout = center_layout
@@ -376,7 +441,7 @@ class MissionControlWindow(QMainWindow):
         threading.Thread(target=self._init_backend, daemon=True).start()
 
     def _init_backend(self) -> None:
-        # Sandbox
+        # Sandbox (background thread — network I/O is fine here)
         try:
             self.signals.log.emit("Starting Docker container…", "info")
             self.sandbox = Sandbox(cfg)
@@ -391,18 +456,28 @@ class MissionControlWindow(QMainWindow):
             self.signals.log.emit(f"Docker ERROR: {e}", "error")
             QTimer.singleShot(0, lambda: self.top_bar.set_docker_status(False))
 
-        # LLM
-        try:
-            QTimer.singleShot(0, lambda: self.top_bar.set_model_status("loading"))
-            self.signals.log.emit("Loading model (Qwen3)…", "info")
-            self.llm = load_llm()
-            self.signals.log.emit("Model ready ✓", "success")
-            QTimer.singleShot(0, lambda: self.top_bar.set_model_status("ready"))
-        except Exception as e:
-            self.signals.log.emit(f"Model ERROR: {e}", "error")
-            QTimer.singleShot(0, lambda: self.top_bar.set_model_status("error"))
+        # Schedule LLM loading on the main thread (CUDA needs main thread on Windows)
+        QTimer.singleShot(0, self._load_model)
 
-        QTimer.singleShot(0, lambda: self.inspector.set_config(cfg))
+    def _load_model(self) -> None:
+        """Load LLM on the main thread (CUDA must init on main thread on Windows)."""
+        # Apply per-model runtime params from profile
+        profile = MODEL_PROFILES.get(cfg.MODEL_NAME, {})
+        cfg.N_CTX = profile.get("n_ctx", cfg.N_CTX)
+        cfg.N_BATCH = profile.get("n_batch", cfg.N_BATCH)
+
+        self.top_bar.set_model_status("loading")
+        self.log_panel.append(f"Loading model ({cfg.MODEL_NAME})…", "info")
+        QApplication.processEvents()
+        llm = _load_llm_with_retry(max_attempts=3)
+        if llm is not None:
+            self.llm = llm
+            self.log_panel.append("Model ready ✓", "success")
+            self.top_bar.set_model_status("ready")
+        else:
+            self.log_panel.append("Model failed to load after retries.", "error")
+            self.top_bar.set_model_status("error")
+        self.inspector.set_config(cfg)
 
     def _setup_vm_view(self) -> None:
         if not self.sandbox:
@@ -494,9 +569,14 @@ class MissionControlWindow(QMainWindow):
     # --- Signal handlers ---
     def _on_log(self, msg: str, level: str) -> None:
         self.log_panel.append(msg, level)
+        # Mirror to file logger
+        _level_map = {"error": log.error, "warn": log.warning,
+                      "success": log.info, "model": log.info}
+        _level_map.get(level, log.info)(msg)
 
     def _on_busy(self, busy: bool) -> None:
         self.cmd_panel.set_busy(busy)
+        self.top_bar.set_model_combo_enabled(not busy)
         if self.vm_view:
             self.vm_view.input_enabled = not busy
         self.refresh_timer.setInterval(650 if busy else 350)
@@ -522,6 +602,79 @@ class MissionControlWindow(QMainWindow):
 
     def _on_latency(self, ms: float) -> None:
         self.top_bar.set_latency(ms)
+
+    # --- Model switching ---
+    def _on_model_switch(self, model_name: str) -> None:
+        if model_name == cfg.MODEL_NAME:
+            return
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.log_panel.append("Cannot switch model while a command is running.", "warn")
+            # Reset combo back
+            idx = self.top_bar.model_combo.findText(cfg.MODEL_NAME)
+            if idx >= 0:
+                self.top_bar.model_combo.blockSignals(True)
+                self.top_bar.model_combo.setCurrentIndex(idx)
+                self.top_bar.model_combo.blockSignals(False)
+            return
+
+        profile = MODEL_PROFILES.get(model_name)
+        if not profile:
+            self.log_panel.append(f"Unknown model profile: {model_name}", "error")
+            return
+
+        self.top_bar.set_model_combo_enabled(False)
+        self.top_bar.set_model_status("loading")
+        self.log_panel.append(f"Switching to model: {model_name}…", "info")
+        QApplication.processEvents()
+
+        try:
+            # Update cfg fields
+            cfg.MODEL_NAME = model_name
+            cfg.GGUF_REPO_ID = profile["repo_id"]
+            cfg.GGUF_MODEL_FILENAME = profile["model_file"]
+            cfg.GGUF_MMPROJ_FILENAME = profile["mmproj_file"]
+            cfg.CHAT_HANDLER = profile["chat_handler"]
+            cfg.N_CTX = profile.get("n_ctx", 2048)
+            cfg.N_BATCH = profile.get("n_batch", 32)
+
+            # Unload old model
+            if self.llm is not None:
+                del self.llm
+                self.llm = None
+                import gc; gc.collect()
+
+            QApplication.processEvents()
+            llm = _load_llm_with_retry(max_attempts=3)
+            if llm is not None:
+                self.llm = llm
+                self.log_panel.append(f"Model {model_name} ready ✓", "success")
+                self.top_bar.set_model_status("ready")
+            else:
+                self.log_panel.append(f"Model {model_name} failed to load after retries.", "error")
+                self.top_bar.set_model_status("error")
+            self.inspector.set_config(cfg)
+        except Exception as e:
+            self.log_panel.append(f"Model switch ERROR: {e}", "error")
+            self.top_bar.set_model_status("error")
+        finally:
+            self.top_bar.set_model_combo_enabled(True)
+
+
+def _load_llm_with_retry(max_attempts: int = 3) -> Optional[Any]:
+    """Load LLM with retries — CUDA on Windows can have intermittent init failures."""
+    import gc
+    for attempt in range(1, max_attempts + 1):
+        try:
+            log.info("Loading model (attempt %d/%d)", attempt, max_attempts)
+            llm = load_llm()
+            log.info("Model loaded successfully")
+            return llm
+        except Exception:
+            log.exception("Model load attempt %d failed", attempt)
+            gc.collect()
+            if attempt < max_attempts:
+                time.sleep(1)
+    return None
 
 
 def main():

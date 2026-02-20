@@ -5,9 +5,13 @@ import base64
 import os
 from typing import TYPE_CHECKING
 
+import numpy as np
 from PIL import Image, ImageDraw
 
 from src.config import IMAGE_MIME, cfg
+from src.log import get_logger
+
+log = get_logger("vision")
 
 if TYPE_CHECKING:
     from src.sandbox import Sandbox
@@ -46,6 +50,27 @@ def capture_screen_raw(sandbox) -> Image.Image:
     return sandbox.screenshot().convert("RGB")
 
 
+def screen_changed(prev: Image.Image, curr: Image.Image,
+                    threshold: float = 0.0) -> bool:
+    """Return True if the two screenshots differ significantly.
+
+    Compares mean absolute pixel difference.  A threshold of 0.02 means
+    the average pixel must change by more than 2% of the 0-255 range.
+    """
+    if threshold <= 0.0:
+        threshold = cfg.CHANGE_THRESHOLD
+    try:
+        a = np.asarray(prev.resize((160, 90))).astype(np.float32)
+        b = np.asarray(curr.resize((160, 90))).astype(np.float32)
+        diff = np.mean(np.abs(a - b)) / 255.0
+        changed = bool(diff > threshold)
+        log.debug("screen_changed: diff=%.4f threshold=%.4f -> %s", diff, threshold, changed)
+        return changed
+    except Exception:
+        log.exception("screen_changed comparison failed, assuming changed")
+        return True
+
+
 def draw_preview(img: Image.Image, x: float, y: float, out_path: str, r: int = 10) -> None:
     cp = img.copy().convert("RGB")
     w, h = cp.size
@@ -54,4 +79,4 @@ def draw_preview(img: Image.Image, x: float, y: float, out_path: str, r: int = 1
     d = ImageDraw.Draw(cp)
     d.ellipse((px - r, py - r, px + r, py + r), fill="red", outline="white", width=2)
     cp.save(out_path)
-    print(f"[PREVIEW] {out_path} (x={x:.4f}, y={y:.4f})")
+    log.debug("Preview saved: %s (x=%.4f, y=%.4f)", out_path, x, y)

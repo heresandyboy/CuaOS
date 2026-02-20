@@ -6,6 +6,9 @@ from typing import Any, Dict
 
 from src.sandbox import Sandbox
 from src.config import cfg
+from src.log import get_logger
+
+log = get_logger("action")
 
 
 def _pause_after_action() -> None:
@@ -15,6 +18,7 @@ def _pause_after_action() -> None:
 def execute_action(sandbox: Sandbox, act: Dict[str, Any]) -> None:
     """Execute one action dict produced by the model."""
     a = (act.get("action") or "NOOP").upper()
+    log.debug("execute: %s %s", a, {k: v for k, v in act.items() if k != "action"})
 
     if a == "NOOP":
         return

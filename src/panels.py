@@ -14,7 +14,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QFrame, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QTextEdit, QListWidget, QListWidgetItem,
-    QGridLayout, QSizePolicy, QFileDialog
+    QGridLayout, QSizePolicy, QFileDialog, QComboBox
 )
 
 from src.design_system import C
@@ -33,7 +33,9 @@ def _dot(color: str, text: str) -> str:
 # ═══════════════════════════════════════════
 
 class TopBar(QFrame):
-    """Docker status, Model status, Step counter, Latency indicator."""
+    """Docker status, Model selector, Model status, Step counter, Latency indicator."""
+
+    model_switch_requested = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -51,6 +53,26 @@ class TopBar(QFrame):
         layout.addWidget(title)
 
         layout.addStretch()
+
+        # Model selector
+        model_lbl = QLabel("Model:")
+        model_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; font-size: 12px;")
+        layout.addWidget(model_lbl)
+
+        self.model_combo = QComboBox()
+        self.model_combo.setFixedWidth(180)
+        self.model_combo.setStyleSheet(
+            f"QComboBox {{ background: {C.BG_INPUT}; color: {C.TEXT_DIM}; "
+            f"border: 1px solid {C.BORDER}; border-radius: 4px; padding: 4px 8px; font-size: 12px; }}"
+        )
+        from src.config import MODEL_PROFILES, DEFAULT_MODEL
+        for name in MODEL_PROFILES:
+            self.model_combo.addItem(name)
+        idx = self.model_combo.findText(DEFAULT_MODEL)
+        if idx >= 0:
+            self.model_combo.setCurrentIndex(idx)
+        self.model_combo.currentTextChanged.connect(self._on_model_changed)
+        layout.addWidget(self.model_combo)
 
         # Docker status
         self.docker_status = QLabel(_dot(C.TEXT_MUTED, "Docker: —"))
@@ -88,6 +110,12 @@ class TopBar(QFrame):
 
     def set_latency(self, ms: float) -> None:
         self.latency_label.setText(f"Latency: {ms:.0f}ms")
+
+    def _on_model_changed(self, name: str) -> None:
+        self.model_switch_requested.emit(name)
+
+    def set_model_combo_enabled(self, enabled: bool) -> None:
+        self.model_combo.setEnabled(enabled)
 
 
 # ═══════════════════════════════════════════
@@ -283,11 +311,13 @@ class InspectorPanel(QFrame):
         self.vm_info.setText(f"Container: {container}\nResolution: {resolution}\nAPI: {api_url}")
 
     def set_config(self, cfg) -> None:
+        gpu_layers = getattr(cfg, 'N_GPU_LAYERS', '?')
+        gpu_display = f"{gpu_layers} (all)" if gpu_layers == -1 else str(gpu_layers)
         lines = [
             f"Model: {getattr(cfg, 'GGUF_MODEL_FILENAME', '?')}",
             f"Max Steps: {getattr(cfg, 'MAX_STEPS', '?')}",
             f"N_CTX: {getattr(cfg, 'N_CTX', '?')}",
-            f"GPU Layers: {getattr(cfg, 'N_GPU_LAYERS', '?')}",
+            f"GPU Layers: {gpu_display}",
         ]
         self.config_info.setText("\n".join(lines))
 

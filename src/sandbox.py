@@ -10,6 +10,10 @@ from typing import Any, Dict, Optional, Tuple
 import requests
 from PIL import Image
 
+from src.log import get_logger
+
+log = get_logger("sandbox")
+
 
 def _safe_getattr(obj, key: str, default):
     return getattr(obj, key, default)
@@ -152,10 +156,10 @@ class Sandbox:
             want_res = str(self.vnc_resolution)
             want_depth = str(self.vnc_col_depth)
             if env.get("VNC_RESOLUTION") != want_res or env.get("VNC_COL_DEPTH") != want_depth:
-                print("[SANDBOX] VNC env changed -> restarting container...")
+                log.info("VNC env changed -> restarting container")
                 self.stop()
             else:
-                print(f"[SANDBOX] Container already running: {self.container_name}")
+                log.info("Container already running: %s", self.container_name)
                 self._wait_api_ready(timeout=self.api_ready_timeout)
                 return
 
@@ -163,7 +167,7 @@ class Sandbox:
         if _docker_exists(self.container_name) and not _docker_running(self.container_name):
             subprocess.run(["docker", "rm", "-f", self.container_name], check=False)
 
-        print("[SANDBOX] Starting container...")
+        log.info("Starting container...")
         cmd = [
             "docker", "run", "-d",
             "--name", self.container_name,
@@ -187,10 +191,10 @@ class Sandbox:
         """
         try:
             subprocess.Popen(["vncviewer", f"127.0.0.1:{self.host_vnc_port}"])
-            print("[SANDBOX] VNC viewer launched.")
+            log.info("VNC viewer launched")
         except FileNotFoundError:
-            print("[SANDBOX] vncviewer not found. Use noVNC:",
-                  f"http://127.0.0.1:{self.host_novnc_port}")
+            log.info("vncviewer not found. Use noVNC: http://127.0.0.1:%d",
+                     self.host_novnc_port)
 
     # -----------------------
     # Readiness
@@ -202,7 +206,7 @@ class Sandbox:
           1) Try GET /status (if available)
           2) Otherwise try POST /cmd get_screen_size
         """
-        print(f"[SANDBOX] Waiting up to {int(timeout)}s for API to become ready at {self.cmd_url} ...")
+        log.info("Waiting up to %ds for API at %s", int(timeout), self.cmd_url)
         t0 = time.time()
         last_err: Optional[Exception] = None
 
@@ -212,7 +216,7 @@ class Sandbox:
                 r = requests.get(self.status_url, timeout=self.http_timeout)
                 if r.status_code == 200:
                     # some versions may return empty body; 200 is sufficient
-                    print("[SANDBOX] API ready (/status).")
+                    log.info("API ready (/status)")
                     return
             except Exception as e:
                 last_err = e
@@ -221,7 +225,7 @@ class Sandbox:
             try:
                 res = self._post_cmd("get_screen_size", {})
                 if isinstance(res, dict) and res.get("success") is True:
-                    print("[SANDBOX] API ready (/cmd).")
+                    log.info("API ready (/cmd)")
                     return
             except Exception as e:
                 last_err = e
