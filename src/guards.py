@@ -276,6 +276,24 @@ def _detect_direct_repeat(history: List[Dict[str, Any]], new_action: Dict[str, A
                     "double-clicking, right-clicking, or using keyboard navigation instead."
                 )
 
+    # VISIT_URL: 2 consecutive identical URLs
+    if a2 == "VISIT_URL":
+        if (last.get("url") or "") == (new_action.get("url") or ""):
+            return True, (
+                "You already tried visit_url with the same URL and it had no effect. "
+                "A browser window must be open first. Look at the screenshot — "
+                "if no browser is visible, open Firefox by clicking its desktop icon."
+            )
+
+    # WEB_SEARCH: 2 consecutive identical queries
+    if a2 == "WEB_SEARCH":
+        if (last.get("query") or "") == (new_action.get("query") or ""):
+            return True, (
+                "You already tried web_search with the same query and it had no effect. "
+                "A browser window must be open first. Look at the screenshot — "
+                "if no browser is visible, open Firefox by clicking its desktop icon."
+            )
+
     return False, ""
 
 

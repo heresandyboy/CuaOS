@@ -539,6 +539,56 @@ check("same CLICK is NOT changed", _model_changed_approach(history, new_click), 
 
 
 # ═══════════════════════════════════════════
+# 26b. Guard: VISIT_URL/WEB_SEARCH repeat detection
+# ═══════════════════════════════════════════
+print("\n=== Guard: VISIT_URL/WEB_SEARCH repeat ===")
+from src.guards import _detect_direct_repeat, check_repeat
+
+# VISIT_URL repeated with same URL -> detected
+hist_vu = [{"action": "VISIT_URL", "url": "https://example.com"}]
+new_vu = {"action": "VISIT_URL", "url": "https://example.com"}
+rep, msg = _detect_direct_repeat(hist_vu, new_vu)
+check("VISIT_URL same URL detected", rep, True)
+check("VISIT_URL msg mentions browser", "browser" in msg.lower(), True)
+
+# VISIT_URL with different URL -> not detected
+new_vu_diff = {"action": "VISIT_URL", "url": "https://other.com"}
+rep2, _ = _detect_direct_repeat(hist_vu, new_vu_diff)
+check("VISIT_URL different URL ok", rep2, False)
+
+# WEB_SEARCH repeated with same query -> detected
+hist_ws = [{"action": "WEB_SEARCH", "query": "test query"}]
+new_ws = {"action": "WEB_SEARCH", "query": "test query"}
+rep3, msg3 = _detect_direct_repeat(hist_ws, new_ws)
+check("WEB_SEARCH same query detected", rep3, True)
+check("WEB_SEARCH msg mentions browser", "browser" in msg3.lower(), True)
+
+# WEB_SEARCH with different query -> not detected
+new_ws_diff = {"action": "WEB_SEARCH", "query": "other query"}
+rep4, _ = _detect_direct_repeat(hist_ws, new_ws_diff)
+check("WEB_SEARCH different query ok", rep4, False)
+
+# Full check_repeat: VISIT_URL repeat triggers NUDGE
+verdict_vu, msg_vu = check_repeat(hist_vu, new_vu, nudge_count=0)
+check("VISIT_URL repeat -> NUDGE", verdict_vu, "nudge")
+
+# Full check_repeat: VISIT_URL repeat with max nudges -> STOP
+verdict_vu2, msg_vu2 = check_repeat(hist_vu, new_vu, nudge_count=3)
+check("VISIT_URL repeat + max nudges -> STOP", verdict_vu2, "stop")
+
+
+# ═══════════════════════════════════════════
+# 26c. System prompt mentions XFCE/Firefox
+# ═══════════════════════════════════════════
+print("\n=== System Prompt: Desktop Context ===")
+prompt_check = _build_fara_system_prompt(1920, 1080)
+check("prompt mentions XFCE", "XFCE" in prompt_check, True)
+check("prompt mentions Firefox", "Firefox" in prompt_check, True)
+check("prompt warns visit_url needs browser", "browser" in prompt_check.lower(), True)
+check("prompt mentions open Firefox first", "open" in prompt_check.lower() and "Firefox" in prompt_check, True)
+
+
+# ═══════════════════════════════════════════
 # 27. Smart resize consistency
 # ═══════════════════════════════════════════
 print("\n=== Smart Resize ===")

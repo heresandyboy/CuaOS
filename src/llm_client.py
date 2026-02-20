@@ -539,8 +539,15 @@ def _build_fara_system_prompt(screen_w: int, screen_h: int) -> str:
         "name": "computer_use",
         "description": (
             "Use a mouse and keyboard to interact with a computer, and take screenshots.\n"
-            "* This is an interface to a desktop GUI. You do not have access to a "
-            "terminal or applications menu. You must click on desktop icons to start applications.\n"
+            "* This is a Linux XFCE desktop. You can see the desktop with icons and a taskbar.\n"
+            "* IMPORTANT: If no browser window is visible on screen, you MUST first open Firefox "
+            "by double-clicking its icon on the desktop or in the taskbar. Only after Firefox is "
+            "open and visible can you use visit_url or web_search actions.\n"
+            "* visit_url and web_search REQUIRE a browser to be open. They use keyboard shortcuts "
+            "(Ctrl+L) that only work inside a browser window. If no browser is visible, these "
+            "actions will fail silently. Always check the screenshot first.\n"
+            "* You do not have access to a terminal or applications menu. You must click on "
+            "desktop icons to start applications.\n"
             "* Some applications may take time to start or process actions, so you may need to "
             "wait and take successive screenshots to see the results of your actions. E.g. if "
             "you click on Firefox and a window doesn't open, try wait and taking another screenshot.\n"
@@ -560,7 +567,9 @@ def _build_fara_system_prompt(screen_w: int, screen_h: int) -> str:
             "* On some search bars, when you type(), you may need to press_enter=False and instead "
             "separately call left_click() on the search button to submit the search query.\n"
             "* For calendar widgets, you usually need to left_click() on arrows to move between "
-            "months and left_click() on dates to select them; type() is not typically used."
+            "months and left_click() on dates to select them; type() is not typically used.\n"
+            "* ALWAYS look at the screenshot carefully before choosing an action. Describe what "
+            "you see on screen in your thinking before acting."
         ),
         "parameters": {
             "type": "object",
@@ -781,7 +790,12 @@ def _ask_fara(llm: Llama, objective: str, uri: str, history: List[Dict[str, Any]
     # Build user message for this turn
     is_first = len(_fara_chat_history) == 0
     if is_first:
-        user_text = f"Task: {objective}\nHere is the screenshot. Think about what to do next."
+        user_text = (
+            f"Task: {objective}\n"
+            "Look at the screenshot carefully. Describe what you see on screen, "
+            "then decide your first action. If no browser is open and the task requires "
+            "web navigation, you must first open Firefox by clicking its icon."
+        )
     else:
         # Build observation text from last action result
         obs_parts = []
@@ -789,12 +803,22 @@ def _ask_fara(llm: Llama, objective: str, uri: str, history: List[Dict[str, Any]
             last = history[-1]
             last_action = (last.get("action") or "").upper()
             if last_action == "SYSTEM_FEEDBACK":
-                obs_parts.append(f"WARNING: {last.get('target', '')}")
+                obs_parts.append(f"IMPORTANT WARNING: {last.get('target', '')}")
             elif last.get("screen_changed") is False:
-                obs_parts.append("Your last action had no visible effect on the screen.")
+                obs_parts.append(
+                    "Your last action had NO visible effect on the screen. "
+                    "The action did not work. You need to try a different approach."
+                )
+                # Give specific guidance for common failures
+                if last_action in ("VISIT_URL", "WEB_SEARCH"):
+                    obs_parts.append(
+                        "REASON: visit_url/web_search failed because no browser window is active. "
+                        "You MUST open Firefox first by clicking its icon on the desktop or taskbar."
+                    )
             elif last.get("screen_changed") is True:
-                obs_parts.append("The screen has changed after your last action.")
-        obs_parts.append("Here is the next screenshot. Think about what to do next.")
+                obs_parts.append("The screen has changed after your last action. Good progress.")
+        obs_parts.append(f"Reminder — your task: {objective}")
+        obs_parts.append("Look at the screenshot and think about what to do next.")
         user_text = "\n".join(obs_parts)
 
     user_msg = {"role": "user", "content": [
