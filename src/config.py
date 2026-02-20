@@ -43,7 +43,7 @@ MODEL_PROFILES: Dict[str, Dict] = {
 }
 
 # Active model — change this to switch models (or set env var CUAOS_MODEL)
-DEFAULT_MODEL = os.environ.get("CUAOS_MODEL", "qwen3-vl-8b")
+DEFAULT_MODEL = os.environ.get("CUAOS_MODEL", "fara-7b")
 
 # HuggingFace cache — store all models in L:\models\huggingface
 HF_CACHE_DIR = os.environ.get("HF_HOME", r"L:\models\huggingface")
